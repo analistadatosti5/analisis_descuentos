@@ -1,0 +1,22 @@
+# Credenciales
+.env
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Editores / herramientas
+.vscode/
+.claude/
+CLAUDE.md
+CLAUDE.local.md
+
+# Salidas: se regeneran con main.py, no se versionan.
+# (un .parquet de 2025-2026 pesa cientos de MB; GitHub rechaza archivos > 100 MB)
+*.xlsx
+*.xls
+*.parquet
+*.csv
+~$*
