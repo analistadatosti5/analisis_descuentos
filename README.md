@@ -6,7 +6,8 @@ de % de lista**, para analizar cuánto de la venta se cobra a precio de lista y 
 motivo se descuenta.
 
 Lee de PostgreSQL (`commercial_bi`, solo lectura) y escribe un `.xlsx` cuando el
-período es de un mes o menos, o un `.parquet` cuando es más largo.
+período es de un mes o menos, o un `.parquet` cuando es más largo. Los informes en
+PowerPoint se generan con los notebooks (ver [Reportes semanales](#reportes-semanales)).
 
 ## Instalación
 
@@ -19,7 +20,48 @@ pip install -r requirements.txt
 Copiar `.env.example` como `.env` en esta carpeta y completar la conexión `DB_*`.
 Si no hay `.env` aquí, el script usa el de la carpeta hermana `../Lista de precios/`.
 
-## Uso
+## Reportes semanales
+
+Los PowerPoint se generan con notebooks (en VS Code, con el kernel del entorno virtual). Cada
+semana se corren dos, **en este orden y con el mismo corte**:
+
+1. **`Res.ipynb`**: los 8 PowerPoint de Res (Región Oriente y Región Occidente × Tradicional,
+   Institucional, Modernos y Amas de casa), en `output/Res/`.
+   - En A.1, poner en `CORTE_D` el último día que debe entrar, p. ej. `date(2026, 10, 17)` para
+     cortar al sábado 17 (`None` = ayer).
+   - Dejar `GENERAR_PARQUET_D = True`: consulta la base (mes anterior completo + mes en curso
+     hasta `CORTE_D`) y deja el Parquet `Descuentos_<1 del mes anterior>_<CORTE_D + 1 día>.parquet`
+     en esta carpeta.
+   - *Run All*.
+2. **`Informe_Avance_Region_dos_meses.ipynb`**: el informe de avance de Región Oriente y de
+   Región Occidente (dos PowerPoint), en `output/Informe_Avance_Region/`.
+   - En A.1, poner el **mismo** `CORTE_D`.
+   - Dejar `GENERAR_PARQUET_D = False`: reutiliza el Parquet que acaba de descargar Res (son
+     exactamente los mismos datos) sin volver a consultar la base. Si el archivo no existe, lo
+     consulta.
+   - *Run All*.
+
+`CORTE_D` **es inclusivo**: el día que se pone entra en el informe (la consulta llega hasta el día
+siguiente, sin incluirlo). Ninguno de los dos usa el histórico 2025–2026, solo el mes anterior y el
+mes en curso.
+
+Para volver a correr un corte otro día (p. ej. para traer ventas que se cargaron después), dejar
+`GENERAR_PARQUET_D = True` en Res: vuelve a consultar y reemplaza el Parquet de ese corte.
+
+### Otros informes
+
+| Notebook | Genera | Carpeta |
+| --- | --- | --- |
+| `Informe_Ajustes_Region.ipynb` | Informe general 2025 vs 2026 por región y Excel del panorama | `output/Informe_Ajustes_Region/` |
+| `Top_Clientes.ipynb` | Top de clientes del mes de `MES_CLIENTES` | `output/Top_Clientes/` |
+| `Informe_Cliente.ipynb` | Informe de un cliente (`CLIENTE`) | `output/Informe_Cliente/` |
+| `Descuentos.ipynb` | El notebook original, que genera todo junto | `output/General/` |
+
+Estos sí leen el histórico 2025–2026 (`FECHA_INICIO` a `FECHA_FIN`, un Parquet de ~500 MB que
+tarda varios minutos en consultarse). Con `GENERAR_PARQUET = False` reutilizan el Parquet que ya
+exista con las mismas fechas.
+
+## Tabla base con `main.py`
 
 Los comandos se corren desde esta carpeta. `--fin` **no se incluye** (es exclusivo).
 
