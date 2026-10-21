@@ -10,7 +10,6 @@ venv/
 # Editores / herramientas
 .vscode/
 .claude/
-CLAUDE.md
 CLAUDE.local.md
 
 # Salidas: se regeneran con main.py, no se versionan.
@@ -20,3 +19,14 @@ CLAUDE.local.md
 *.parquet
 *.csv
 ~$*
+# Salidas: se versionan los .gitkeep para mantener la estructura de carpetas.
+output/Informe_Ajustes_Region/*
+!output/Informe_Ajustes_Region/.gitkeep
+output/Informe_Cliente/*
+!output/Informe_Cliente/.gitkeep
+output/Res/*
+!output/Res/.gitkeep
+output/Top_Clientes/*
+!output/Top_Clientes/.gitkeep
+output/General/*
+!output/General/.gitkeep
