@@ -30,3 +30,9 @@ output/Top_Clientes/*
 !output/Top_Clientes/.gitkeep
 output/General/*
 !output/General/.gitkeep
+output/Informe_Avance_Region/*
+!output/Informe_Avance_Region/.gitkeep
+output/Informe_Diario_Canal_Venta/*
+!output/Informe_Diario_Canal_Venta/.gitkeep
+output/Reporte_Ejecutivo/*
+!output/Reporte_Ejecutivo/.gitkeep

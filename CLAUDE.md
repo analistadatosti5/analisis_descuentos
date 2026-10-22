@@ -11,14 +11,26 @@ Análisis de descuentos comerciales (ventas sectores 10, 15, 20, 21) leído de P
   si es más largo). Está documentada en detalle en `README.md` (columnas, fórmulas, rangos, limitaciones).
 - **Un notebook por informe** (generan sus propios Parquet, los analizan y producen los entregables):
   - `Informe_Ajustes_Region.ipynb`: informe general por región (C.2) y Excel del panorama (C.5).
-  - `Informe_Avance_Region_dos_meses.ipynb`: informe de avance (C.6), siempre las dos regiones (guarda en
-    `output/Informe_Avance_Region/`). Como Res, solo consulta y lee
-    el mes anterior + mes en curso hasta `CORTE_D` (su sección 2 lleva la tabla y solo la gráfica de venta kg /
-    pesos por día).
-  - `Res.ipynb`: PowerPoint de Res por región × canal de venta (C.7). Se corre **cada semana** cambiando solo
-    `CORTE_D`; consulta y lee solo el Parquet del mes anterior + mes en curso (no tiene el histórico: sin A.3
-    histórico ni lectura del Parquet 2025–2026; su lectura del mes es A.6). Todo lo que necesitaba del histórico
-    lo pone `modo_corte()`. La consulta trae todos los materiales porque la nota "días con venta" es de toda la región.
+  - `Informe_Region_semanal.ipynb`: informe de avance (C.6), siempre las dos regiones (guarda en
+    `output/Informe_Avance_Region/`). Es el **reporte semanal**: se corre cambiando solo `CORTE_D`. Solo consulta y
+    lee el mes anterior + mes en curso (sin histórico; lo que el código heredado necesitaba del histórico lo pone
+    `modo_corte()`). **No usa Parquet:** A.6 llama `consultas.descargar_mes()` (SQL `SQL_REPORTES` + `calcular()`,
+    en `consultas.py`), recibe un DataFrame y lo recorre por partes. Ese SQL separa las **devoluciones** (líneas con
+    `value < 0`): venta kg/neta/bruta y descuentos son solo de ventas, y `Devolucion Kg` / `Devolucion Valor` van
+    aparte (panorama).
+  - `Informe_Diario_Canal_Venta.ipynb`: **reporte diario**, siempre a corte de ayer (A.4 calcula `CORTE_D`, no es
+    parámetro). Sale del avance (misma `descargar_mes()` y mismas funciones, recortadas): 8 PowerPoint (2 regiones ×
+    4 canales de venta) con las láminas 1, 2, 3, 4, 5 y 14 del avance. La lectura guarda el canal de venta (`diario_cv`, `cubo_cv`) y `solo_canal_venta(cv)` cambia
+    `diario_soc`, `cubo_d` y `CAMBIOS_CORTE["cubo"]` por los del canal; va por fuera de `modo_corte()`.
+  - `Reporte_Ejecutivo.ipynb`: **reporte ejecutivo diario**, una lámina (corte de ayer). Sale del diario (A.2–A.5
+    y C.1 recortados); su A.6 agrega `base` = sumas por sociedad × canal de venta × canal de distribución × grupo
+    de material 6 × periodo, y `diario` = sumas por sociedad × día. C.2 arma la lámina con `resumen()` / `ruta()`
+    (menor cumplimiento; canal de distribución y grupo con al menos `PARTICIPACION_MIN` % de la venta de su nivel) y
+    `cumplimiento_por_tipo()` (L_AJ y L_FC). C.3 agrega una lámina por región (`reporte_region()`):
+    `resumen_niveles()` abre por varios niveles con los dos motivos de ajuste, `figura_mapa()` es el mapa canal de
+    venta × canal de distribución y `figura_tendencia()` el cumplimiento acumulado por día del mes (mes en curso vs
+    anterior, desde `diario`).
+  - El informe de Res / Foco Res ya no existe (`Res.ipynb` se eliminó); solo queda en `Descuentos.ipynb`, el original.
   - `Top_Clientes.ipynb`: top de clientes (C.3).
   - `Informe_Cliente.ipynb`: informe de un cliente (C.4).
 - **`Descuentos.ipynb`**: el notebook original, que hace todo junto y del que salieron los cuatro anteriores
@@ -62,10 +74,9 @@ A.7). **No comparten código:** cada uno tiene su propia copia de la preparació
 cambio en una función compartida (p. ej. `figura_rangos`, `indicadores`, `lamina`) hay que repetirlo en cada notebook
 que la tenga. `modo_corte()` y `solo_canal()` reemplazan variables globales del notebook mientras dura el
 `with`, por eso el código vive en los notebooks y no en un módulo `.py`. Los Parquet son los mismos
-archivos para todos: con `GENERAR_PARQUET*=False` se reutilizan los que ya generó otro notebook. `Res` e
-`Informe_Avance_Region_dos_meses` tienen el mismo código de consulta y lectura del mes: con el mismo `CORTE_D` usan el mismo Parquet. Flujo
-semanal: `Res` con `GENERAR_PARQUET_D=True` (consulta) y luego el avance, que por defecto tiene `False` y reutiliza
-ese archivo (solo consulta si no existe).
+archivos para todos: con `GENERAR_PARQUET*=False` se reutilizan los que ya generó otro notebook. El diario
+y el semanal no usan Parquet: consultan con `consultas.descargar_mes()` cada vez. En `consultas.py`, lo de arriba
+(`SQL_DESCUENTOS`) es de `main.py` y no se toca; lo de los reportes está en el bloque de abajo.
 
 Tres partes; las celdas dependen de variables globales de las anteriores, así que un cambio en A obliga a
 re-ejecutar todo lo de abajo.
@@ -107,6 +118,6 @@ re-ejecutar todo lo de abajo.
 
 Los PowerPoint y el Excel de cada notebook van a `output/<carpeta>/` (`Descuentos.ipynb`, el original, a
 `output/General/`; el avance, a `output/Informe_Avance_Region/`). En `.gitignore` las carpetas de `output/` ignoran su
-contenido salvo el `.gitkeep` (`output/Informe_Avance_Region/` todavía no está en `.gitignore`). Los Parquet quedan en la raíz porque los comparten los cuatro notebooks y `main.py`.
+contenido salvo el `.gitkeep`. Los Parquet quedan en la raíz porque los comparten los cuatro notebooks y `main.py`.
 `.xlsx`, `.parquet` y `.csv` están en `.gitignore` (el Parquet 2025–2026 pesa ~500 MB). Los `.pptx` generados
 no están ignorados: no incluirlos en commits salvo que se pida.
