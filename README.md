@@ -20,33 +20,69 @@ pip install -r requirements.txt
 Copiar `.env.example` como `.env` en esta carpeta y completar la conexión `DB_*`.
 Si no hay `.env` aquí, el script usa el de la carpeta hermana `../Lista de precios/`.
 
-## Reportes semanales
+## Reportes diario y semanal
 
-Los PowerPoint se generan con notebooks (en VS Code, con el kernel del entorno virtual). Cada
-semana se corren dos, **en este orden y con el mismo corte**:
+Los PowerPoint se generan con notebooks (en VS Code, con el kernel del entorno virtual). Los dos
+reportes usan **el mes anterior completo contra el mes en curso** y traen los datos con
+`consultas.descargar_mes()`: cada corrida consulta la base (unos 2 a 3 minutos) y procesa todo en
+memoria, sin escribir Parquet.
 
-1. **`Res.ipynb`**: los 8 PowerPoint de Res (Región Oriente y Región Occidente × Tradicional,
-   Institucional, Modernos y Amas de casa), en `output/Res/`.
-   - En A.1, poner en `CORTE_D` el último día que debe entrar, p. ej. `date(2026, 10, 17)` para
-     cortar al sábado 17 (`None` = ayer).
-   - Dejar `GENERAR_PARQUET_D = True`: consulta la base (mes anterior completo + mes en curso
-     hasta `CORTE_D`) y deja el Parquet `Descuentos_<1 del mes anterior>_<CORTE_D + 1 día>.parquet`
-     en esta carpeta.
-   - *Run All*.
-2. **`Informe_Avance_Region_dos_meses.ipynb`**: el informe de avance de Región Oriente y de
-   Región Occidente (dos PowerPoint), en `output/Informe_Avance_Region/`.
-   - En A.1, poner el **mismo** `CORTE_D`.
-   - Dejar `GENERAR_PARQUET_D = False`: reutiliza el Parquet que acaba de descargar Res (son
-     exactamente los mismos datos) sin volver a consultar la base. Si el archivo no existe, lo
-     consulta.
-   - *Run All*.
+| Reporte | Notebook | Corte | Salida |
+| --- | --- | --- | --- |
+| Diario | `Informe_Diario_Canal_Venta.ipynb` | Siempre **ayer**, sin parámetros | `output/Informe_Diario_Canal_Venta/` |
+| Semanal | `Informe_Region_semanal.ipynb` | `CORTE_D` en A.1 | `output/Informe_Avance_Region/` |
 
-`CORTE_D` **es inclusivo**: el día que se pone entra en el informe (la consulta llega hasta el día
-siguiente, sin incluirlo). Ninguno de los dos usa el histórico 2025–2026, solo el mes anterior y el
-mes en curso.
+Para correr cualquiera de los dos: *Run All*. En el semanal, antes, poner en `CORTE_D` el último día
+que debe entrar, p. ej. `date(2026, 10, 17)` para cortar al sábado 17 (`None` = ayer). **`CORTE_D` es
+inclusivo**: ese día entra en el informe.
 
-Para volver a correr un corte otro día (p. ej. para traer ventas que se cargaron después), dejar
-`GENERAR_PARQUET_D = True` en Res: vuelve a consultar y reemplaza el Parquet de ese corte.
+### Informe semanal de avance por región
+
+**Metodología del informe:** el precio de lista, el precio neto y los % de cumplimiento se calculan
+**sin las devoluciones** (líneas de venta con valor negativo, que se registran a precio neto y sin
+descuento). Las devoluciones se muestran aparte en el panorama (kg y valor devueltos).
+
+Contenido de cada PowerPoint: portada; panorama (tabla con devoluciones y tendencia diaria de precio
+de lista y neto, y de venta neta con % de cumplimiento); rangos del total, por canal de distribución,
+canal de venta y grupo de material; distribuidoras; y una lámina con el top 15 de clientes de Mayoreo
+y de Puntos de Venta.
+
+### Informe diario por canal de venta
+
+**`Informe_Diario_Canal_Venta.ipynb`** genera 8 PowerPoint (Región Oriente y Región Occidente ×
+Institucional, Amas de casa, Modernos y Tradicional) en `output/Informe_Diario_Canal_Venta/`. Cada uno
+lleva 6 láminas del informe de avance, con toda la información filtrada por ese canal de venta:
+portada, panorama, tendencia diaria, rangos de % de cumplimiento, resumen por canal de distribución y
+resumen por grupo de material 6. Va siempre a corte de ayer (no tiene `CORTE_D`).
+
+### Reporte ejecutivo diario
+
+**`Reporte_Ejecutivo.ipynb`** genera una sola lámina, a corte de ayer contra el mes anterior completo, en
+`output/Reporte_Ejecutivo/`. Para el total compañía y cada región muestra:
+- el **% de cumplimiento general** a corte, con la variación contra el mes anterior;
+- el cumplimiento por **canal de venta**, con el menor resaltado;
+- la **ruta** donde menos se cumple: canal de venta → canal de distribución → grupo de material 6. El canal de
+  distribución y el grupo son los de menor cumplimiento entre los que pesan al menos `PARTICIPACION_MIN` (5%) de
+  la venta de su nivel;
+- el **cumplimiento por tipo de descuento**: ajuste de precio de mercado y fecha corta, cada uno como si fuera el
+  único descuento, con su variación.
+
+Además genera **una lámina por región** (`Reporte_Ejecutivo_Region_<región>_…pptx`) con más detalle:
+- **Cómo voy y por qué se descuenta:** el cumplimiento, el ajuste de precio de mercado y la fecha corta en % de la
+  lista con su variación, y las devoluciones.
+- **Dónde:** mapa de calor canal de venta × canal de distribución; rojo, por debajo del cumplimiento general de la
+  región.
+- **Tendencia:** el cumplimiento acumulado del mes, día a día, del mes en curso contra el mes anterior, con la
+  comparación a igual día del mes.
+
+Se corre igual que el diario (*Run All*, sin parámetros) y usa la misma `consultas.descargar_mes()`.
+
+### Datos (`consultas.py`)
+
+`consultas.py` tiene, además del `SQL_DESCUENTOS` que usa `main.py`, la consulta de los reportes
+(`SQL_REPORTES`, con la sociedad y las devoluciones aparte), los cálculos por fila (`calcular()`: % de
+lista, rangos y motivo) y `descargar_mes(inicio, fin)`, que devuelve un DataFrame. Un cambio en la
+consulta o en los cálculos de los reportes se hace ahí una sola vez y lo toman el diario y el semanal.
 
 ### Otros informes
 
