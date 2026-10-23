@@ -29,7 +29,13 @@ Análisis de descuentos comerciales (ventas sectores 10, 15, 20, 21) leído de P
     `cumplimiento_por_tipo()` (L_AJ y L_FC). C.3 agrega una lámina por región (`reporte_region()`):
     `resumen_niveles()` abre por varios niveles con los dos motivos de ajuste, `figura_mapa()` es el mapa canal de
     venta × canal de distribución y `figura_tendencia()` el cumplimiento acumulado por día del mes (mes en curso vs
-    anterior, desde `diario`).
+    anterior, desde `diario`). Cada PowerPoint de región lleva una lámina 2 (`lamina_dia_a_dia()` →
+    `figura_dia_a_dia()`): % cumplimiento de cada día (`linea_cumplimiento_dia()`, con el acumulado del mes en
+    punteado) y barras de venta neta y kg (`barras_dia()`, valores completos), día a día en línea de tiempo del 1 del
+    mes anterior al corte, con el eje hasta el fin del mes en curso (`eje_linea_tiempo()`). Cada gráfico lleva la
+    frase de variación contra el mes anterior al mismo día (`titulo_y_variacion()`). Las barras usan la venta real, descontadas las devoluciones (que vienen en positivo):
+    `Valor Venta Neta` = `Venta Neta − Devolucion Valor` y `Venta Neta Kg` = `Venta Kg − Devolucion Kg`, que A.6
+    agrega a `diario`.
   - El informe de Res / Foco Res ya no existe (`Res.ipynb` se eliminó); solo queda en `Descuentos.ipynb`, el original.
   - `Top_Clientes.ipynb`: top de clientes (C.3).
   - `Informe_Cliente.ipynb`: informe de un cliente (C.4).

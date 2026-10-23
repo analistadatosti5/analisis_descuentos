@@ -18,6 +18,8 @@ CLAUDE.local.md
 *.xls
 *.parquet
 *.csv
+*.pptx
+/old
 ~$*
 # Salidas: se versionan los .gitkeep para mantener la estructura de carpetas.
 output/Informe_Ajustes_Region/*
