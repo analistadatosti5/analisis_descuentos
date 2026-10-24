@@ -24,16 +24,22 @@ Análisis de descuentos comerciales (ventas sectores 10, 15, 20, 21) leído de P
     `diario_soc`, `cubo_d` y `CAMBIOS_CORTE["cubo"]` por los del canal; va por fuera de `modo_corte()`.
   - `Reporte_Ejecutivo.ipynb`: **reporte ejecutivo diario**, una lámina (corte de ayer). Sale del diario (A.2–A.5
     y C.1 recortados); su A.6 agrega `base` = sumas por sociedad × canal de venta × canal de distribución × grupo
-    de material 6 × periodo, y `diario` = sumas por sociedad × día. C.2 arma la lámina con `resumen()` / `ruta()`
+    de material 6 × periodo, `diario` = sumas por sociedad × día y `neta_igual_dia` = valor venta neta (venta menos
+    devoluciones) por sociedad × canal de venta × canal de distribución × periodo, con el mes anterior cortado al
+    mismo día del mes que el corte. C.2 arma la lámina con `resumen()` / `ruta()`
     (menor cumplimiento; canal de distribución y grupo con al menos `PARTICIPACION_MIN` % de la venta de su nivel) y
     `cumplimiento_por_tipo()` (L_AJ y L_FC). C.3 agrega una lámina por región (`reporte_region()`):
     `resumen_niveles()` abre por varios niveles con los dos motivos de ajuste, `figura_mapa()` es el mapa canal de
-    venta × canal de distribución y `figura_tendencia()` el cumplimiento acumulado por día del mes (mes en curso vs
+    venta × canal de distribución (cada celda: % cumplimiento, variación en puntos vs el mes anterior completo y
+    diferencia en valor venta neta vs el mes anterior al mismo día, de `dif_venta_neta()` sobre `neta_igual_dia`, en
+    millones con `variacion_millones()`; fuera del mapa, en gris, los totales por canal de venta, por canal de
+    distribución y de la región, con todos sus canales aunque no salgan en el mapa) y `figura_tendencia()` el cumplimiento acumulado por día del mes (mes en curso vs
     anterior, desde `diario`). Cada PowerPoint de región lleva una lámina 2 (`lamina_dia_a_dia()` →
     `figura_dia_a_dia()`): % cumplimiento de cada día (`linea_cumplimiento_dia()`, con el acumulado del mes en
     punteado) y barras de venta neta y kg (`barras_dia()`, valores completos), día a día en línea de tiempo del 1 del
-    mes anterior al corte, con el eje hasta el fin del mes en curso (`eje_linea_tiempo()`). Cada gráfico lleva la
-    frase de variación contra el mes anterior al mismo día (`titulo_y_variacion()`). Las barras usan la venta real, descontadas las devoluciones (que vienen en positivo):
+    mes anterior al corte, con el eje hasta el fin del mes en curso (`eje_linea_tiempo()`). Solo la primera gráfica
+    (% cumplimiento) lleva la frase de variación contra el mes anterior al mismo día (`titulo_y_variacion()`); las
+    de barras llevan en el título los totales de cada mes. Las barras usan la venta real, descontadas las devoluciones (que vienen en positivo):
     `Valor Venta Neta` = `Venta Neta − Devolucion Valor` y `Venta Neta Kg` = `Venta Kg − Devolucion Kg`, que A.6
     agrega a `diario`.
   - El informe de Res / Foco Res ya no existe (`Res.ipynb` se eliminó); solo queda en `Descuentos.ipynb`, el original.
