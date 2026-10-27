@@ -78,9 +78,15 @@ ORDER BY fecha, cliente, grupo_material_6;
 # Datos del mes para los reportes diario y semanal (Informe_Diario_Canal_Venta.ipynb e
 # Informe_Region_semanal.ipynb). Separado de lo de arriba, que usa main.py tal cual.
 #
-# SQL_REPORTES trae ademas la sociedad (company_code) y las DEVOLUCIONES aparte: kg, venta neta, bruta y descuentos
-# son solo de las lineas de venta (value >= 0); las devoluciones (value < 0, a precio neto y sin descuento) van en
-# devolucion_kg / devolucion_valor y no entran al precio de lista ni al % de cumplimiento.
+# SQL_REPORTES trae ademas la sociedad (company_code) y las DEVOLUCIONES aparte (lineas con kilogram < 0 y value < 0):
+#   kilos brutos (venta_kg)        = SUM(kilogram) sin devoluciones
+#   kilos devueltos (devolucion_kg) = -SUM(kilogram) de las devoluciones;  kilos netos = SUM(kilogram) de todo
+#   valor bruto (venta_bruta)      = SUM(value + discount_value) sin devoluciones
+#   valor devolucion               = -SUM(value + discount_value) de las devoluciones
+#   valor ajuste (descuento_total) = SUM(discount_value) de todo;  valor neto (venta_neta) = SUM(value) de todo
+#   precio de lista = valor bruto / kilos brutos;  precio neto = valor neto / kilos netos
+#   % cumplimiento del precio de lista = precio neto / precio de lista
+# Los ajustes por tipo (mercado, fecha corta, foco) son solo de la venta y sus % siguen sobre la venta bruta.
 # descargar_mes() consulta y devuelve un DataFrame: los notebooks procesan en memoria, sin Parquet.
 # =====================================================================================================================
 import os
@@ -95,9 +101,19 @@ AQUI = Path(__file__).resolve().parent
 FILAS_POR_PARTE = 500_000
 
 SQL_REPORTES = """
-WITH cliente_attr AS (
-    -- Un unico registro por cliente (misma regla que lista de precios:
-    -- price_group valido y el menor alfabeticamente).
+WITH ventas AS (
+    -- Devolucion: linea con kg negativo Y valor negativo. Las demas son venta, incluidas las de valor negativo sin
+    -- kg (p. ej. notas credito), que restan del valor bruto.
+    SELECT v.*, COALESCE(v.kilogram < 0 AND v.value < 0, FALSE) AS es_devolucion
+    FROM public.daily_sales_sector_10_15_20_21 v
+    WHERE v.date >= :fecha_inicio
+      AND v.date <  :fecha_fin             -- fin EXCLUSIVO
+),
+cliente_attr AS (
+    -- Un unico registro por cliente (misma regla que lista de precios: price_group valido y el menor
+    -- alfabeticamente). El orden tiene que desempatar del todo: un cliente puede tener varias filas con la misma
+    -- lista, con y sin tipologia, y sin desempate Postgres elige una cualquiera en cada ejecucion (la venta sin
+    -- tipologia saltaba entre su canal y Directo, que es la tipologia 000). Primero la fila con tipologia.
     SELECT DISTINCT ON (cc.client)
         cc.client,
         NULLIF(cc.price_group, '')       AS price_group,
@@ -106,7 +122,10 @@ WITH cliente_attr AS (
     FROM public.commercial_clients cc
     ORDER BY cc.client,
              (cc.price_group IS NULL OR cc.price_group = '') ASC,
-             cc.price_group ASC
+             cc.price_group ASC,
+             (cc.customer_typology IS NULL OR cc.customer_typology = '') ASC,
+             cc.customer_typology ASC,
+             cc.name ASC
 )
 SELECT
     v.date                                           AS fecha,
@@ -124,19 +143,19 @@ SELECT
     t.name                                           AS nombre_tipologia,
     t.sales_channel_name                             AS canal_venta,
     m.sector,
-    -- Ventas: lineas con valor >= 0. Las devoluciones (valor < 0) van aparte y no entran al precio de lista ni al
-    -- % de cumplimiento: se registran a precio neto y sin descuento, y mezcladas los distorsionan.
-    COALESCE(SUM(v.kilogram) FILTER (WHERE v.value >= 0), 0)                                AS venta_kg,
-    COALESCE(SUM(v.value) FILTER (WHERE v.value >= 0), 0)                                   AS venta_neta,
-    COALESCE(SUM(v.value + COALESCE(v.discount_value, 0)) FILTER (WHERE v.value >= 0), 0)   AS venta_bruta,
-    COALESCE(SUM(COALESCE(v.discount_value, 0)) FILTER (WHERE v.value >= 0), 0)             AS descuento_total,
-    COALESCE(SUM(v.discount_market_price_adjustment) FILTER (WHERE v.value >= 0), 0)        AS descuento_ajuste_mercado,
-    COALESCE(SUM(COALESCE(v.short_dated_discount, 0)) FILTER (WHERE v.value >= 0), 0)       AS descuento_fecha_corta,
-    COALESCE(SUM(COALESCE(v.focus_discount, 0)) FILTER (WHERE v.value >= 0), 0)             AS descuento_foco,
-    -- Devoluciones, en positivo: kg y valor devueltos
-    -COALESCE(SUM(COALESCE(v.kilogram, 0)) FILTER (WHERE v.value < 0), 0)                   AS devolucion_kg,
-    -COALESCE(SUM(v.value) FILTER (WHERE v.value < 0), 0)                                   AS devolucion_valor
-FROM public.daily_sales_sector_10_15_20_21 v
+    -- Brutos (kilos, valor y los ajustes por tipo): solo la venta, sin las devoluciones. Valor neto (SUM(value)) y
+    -- ajuste total (SUM(discount_value)): todas las lineas. Asi bruto - devolucion - ajuste = neto.
+    COALESCE(SUM(v.kilogram) FILTER (WHERE NOT v.es_devolucion), 0)                                AS venta_kg,
+    COALESCE(SUM(v.value), 0)                                                                      AS venta_neta,
+    COALESCE(SUM(v.value + COALESCE(v.discount_value, 0)) FILTER (WHERE NOT v.es_devolucion), 0)   AS venta_bruta,
+    COALESCE(SUM(COALESCE(v.discount_value, 0)), 0)                                                AS descuento_total,
+    COALESCE(SUM(v.discount_market_price_adjustment) FILTER (WHERE NOT v.es_devolucion), 0)        AS descuento_ajuste_mercado,
+    COALESCE(SUM(COALESCE(v.short_dated_discount, 0)) FILTER (WHERE NOT v.es_devolucion), 0)       AS descuento_fecha_corta,
+    COALESCE(SUM(COALESCE(v.focus_discount, 0)) FILTER (WHERE NOT v.es_devolucion), 0)             AS descuento_foco,
+    -- Devoluciones, en positivo: kg y valor devueltos (valor con su descuento, value + discount_value)
+    -COALESCE(SUM(v.kilogram) FILTER (WHERE v.es_devolucion), 0)                                   AS devolucion_kg,
+    -COALESCE(SUM(v.value + COALESCE(v.discount_value, 0)) FILTER (WHERE v.es_devolucion), 0)      AS devolucion_valor
+FROM ventas v
 LEFT JOIN public.materials m
        ON v.material::integer = m.code
 LEFT JOIN public.material_groups_6 g6
@@ -149,11 +168,10 @@ LEFT JOIN cliente_attr cp
        ON v.client = cp.client
 LEFT JOIN public.vw_dim_tipologias_cliente t
        ON t.client_typology_id = LPAD(COALESCE(NULLIF(v.client_typology, ''), cp.tipologia, '0'), 3, '0')
-WHERE v.date >= :fecha_inicio
-  AND v.date <  :fecha_fin                 -- fin EXCLUSIVO
 GROUP BY 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14
-HAVING COALESCE(SUM(v.value), 0) <> 0
-    OR COALESCE(SUM(v.kilogram), 0) <> 0
+-- Fuera solo las filas sin ningun valor: una venta devuelta en la misma fila suma 0 neto, pero tiene bruto,
+-- devolucion y ajuste
+HAVING SUM(ABS(COALESCE(v.value, 0)) + ABS(COALESCE(v.kilogram, 0)) + ABS(COALESCE(v.discount_value, 0))) <> 0
 ORDER BY fecha, cliente, grupo_material_6;
 """
 
@@ -205,8 +223,11 @@ def calcular(df: pd.DataFrame) -> pd.DataFrame:
                "descuento_ajuste_mercado", "descuento_fecha_corta", "descuento_foco", "devolucion_kg",
                "devolucion_valor"]
     df[medidas] = df[medidas].astype(float)
-    df["precio_promedio"] = (df["venta_neta"] / df["venta_kg"].where(df["venta_kg"] != 0)).round(0)
-    bruta = df["venta_bruta"].where(df["venta_bruta"] > 0)   # filas solo con devoluciones (bruta 0): sin %
+    kg_neto = df["venta_kg"] - df["devolucion_kg"]            # kilos netos: SUM(kilogram) de todas las lineas
+    precio_neto = df["venta_neta"] / kg_neto.where(kg_neto > 0)   # SUM(value) / SUM(kilogram)
+    df["precio_promedio"] = precio_neto.round(0)
+    bruta = df["venta_bruta"].where(df["venta_bruta"] > 0)   # filas sin venta bruta (solo devoluciones): sin %
+    precio_lista = bruta / df["venta_kg"].where(df["venta_kg"] > 0)
 
     def sobre_bruta(serie: pd.Series) -> pd.Series:
         return (serie / bruta * 100).round(2)
@@ -215,8 +236,9 @@ def calcular(df: pd.DataFrame) -> pd.DataFrame:
     df["pct_descuento_ajuste"] = sobre_bruta(df["descuento_ajuste_mercado"])
     df["pct_descuento_fecha_corta"] = sobre_bruta(df["descuento_fecha_corta"])
     df["pct_descuento_foco"] = sobre_bruta(df["descuento_foco"])
-    # % de lista: el total usa la neta; los otros aislan un solo descuento, como si fuera el unico
-    df["pct_lista"] = sobre_bruta(df["venta_neta"])
+    # % de lista: el total es precio neto / precio de lista (sin kilos netos o sin venta bruta: vacio, rango "Sin
+    # venta bruta"); los otros aislan un solo descuento sobre la venta bruta, como si fuera el unico
+    df["pct_lista"] = (precio_neto / precio_lista * 100).round(2)
     df["pct_lista_rotacion"] = sobre_bruta(df["venta_bruta"] - df["descuento_fecha_corta"])
     df["pct_lista_ajuste"] = sobre_bruta(df["venta_bruta"] - df["descuento_ajuste_mercado"])
     df["pct_lista_foco"] = sobre_bruta(df["venta_bruta"] - df["descuento_foco"])
