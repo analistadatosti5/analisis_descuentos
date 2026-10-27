@@ -1,101 +1,105 @@
-# Descuentos — tabla base
+# Análisis de descuentos
 
-Genera una tabla base de ventas con el detalle de los **tres descuentos** (ajuste de
-precio de mercado, rotación / fecha corta y foco) y clasifica cada venta en **rangos
-de % de lista**, para analizar cuánto de la venta se cobra a precio de lista y por qué
-motivo se descuenta.
+Análisis del cumplimiento del precio de lista y de los descuentos comerciales (ventas de los sectores 10, 15, 20
+y 21). Lee de PostgreSQL (`commercial_bi`, **solo lectura**) y tiene dos partes independientes:
 
-Lee de PostgreSQL (`commercial_bi`, solo lectura) y escribe un `.xlsx` cuando el
-período es de un mes o menos, o un `.parquet` cuando es más largo. Los informes en
-PowerPoint se generan con los notebooks (ver [Reportes semanales](#reportes-semanales)).
+| Pieza | Qué genera | Dónde |
+| --- | --- | --- |
+| `Reporte_Ejecutivo.ipynb` | Reporte ejecutivo **diario** (corte de ayer), en PowerPoint | `output/Reporte_Ejecutivo/` |
+| `Informe_Region_semanal.ipynb` | Informe **semanal** de avance por región, en PowerPoint | `output/Informe_Avance_Region/` |
+| `main.py` | Tabla base de ventas con el detalle de los descuentos (`.xlsx` o `.parquet`) | esta carpeta |
+
+`consultas.py` tiene las consultas y los cálculos que usan las dos partes (ver [Datos](#datos-consultaspy)).
 
 ## Instalación
 
 ```bash
-python -m venv .venv
-.venv\Scripts\activate            # Windows
+python -m venv venv
+venv\Scripts\activate            # Windows
 pip install -r requirements.txt
 ```
 
+En VS Code, elegir `venv` como kernel de los notebooks.
+
 Copiar `.env.example` como `.env` en esta carpeta y completar la conexión `DB_*`.
-Si no hay `.env` aquí, el script usa el de la carpeta hermana `../Lista de precios/`.
+Si no hay `.env` aquí, se usa el de la carpeta hermana `../Lista de precios/`.
 
-## Reportes diario y semanal
+## Reportes en PowerPoint
 
-Los PowerPoint se generan con notebooks (en VS Code, con el kernel del entorno virtual). Los dos
-reportes usan **el mes anterior completo contra el mes en curso** y traen los datos con
-`consultas.descargar_mes()`: cada corrida consulta la base (unos 2 a 3 minutos) y procesa todo en
-memoria, sin escribir Parquet.
+Los dos notebooks comparan **el mes anterior completo contra el mes en curso** hasta el corte y traen los datos
+con `consultas.descargar_mes()`: cada corrida consulta la base (unos 2 a 3 minutos) y procesa todo en memoria,
+sin escribir Parquet. Se corren completos en orden (*Run All*).
 
-| Reporte | Notebook | Corte | Salida |
+| Reporte | Notebook | Corte | Archivos |
 | --- | --- | --- | --- |
-| Diario | `Informe_Diario_Canal_Venta.ipynb` | Siempre **ayer**, sin parámetros | `output/Informe_Diario_Canal_Venta/` |
-| Semanal | `Informe_Region_semanal.ipynb` | `CORTE_D` en A.1 | `output/Informe_Avance_Region/` |
+| Ejecutivo diario | `Reporte_Ejecutivo.ipynb` | Siempre **ayer**, sin parámetros | `Informe Diario Cumplimiento precio lista [<región>] <mes anterior> vs <mes en curso> al <día>.pptx` |
+| Semanal por región | `Informe_Region_semanal.ipynb` | `CORTE_D` en A.1 | `Informe Semanal <región> <mes anterior> vs <mes en curso> al <día>.pptx` |
 
-Para correr cualquiera de los dos: *Run All*. En el semanal, antes, poner en `CORTE_D` el último día
-que debe entrar, p. ej. `date(2026, 10, 17)` para cortar al sábado 17 (`None` = ayer). **`CORTE_D` es
-inclusivo**: ese día entra en el informe.
+En el semanal, antes de correr, poner en `CORTE_D` el último día que debe entrar, p. ej. `date(2026, 10, 17)`
+para cortar al sábado 17 (`None` = ayer). **`CORTE_D` es inclusivo**: ese día entra en el informe.
 
-### Informe semanal de avance por región
+### Metodología de los reportes
 
-**Metodología del informe:** el precio de lista, el precio neto y los % de cumplimiento se calculan
-**sin las devoluciones** (líneas de venta con valor negativo, que se registran a precio neto y sin
-descuento). Las devoluciones se muestran aparte en el panorama (kg y valor devueltos).
+Es la misma en los dos notebooks (sale de `SQL_REPORTES` en `consultas.py`):
 
-Contenido de cada PowerPoint: portada; panorama (tabla con devoluciones y tendencia diaria de precio
-de lista y neto, y de venta neta con % de cumplimiento); rangos del total, por canal de distribución,
-canal de venta y grupo de material; distribuidoras; y una lámina con el top 15 de clientes de Mayoreo
-y de Puntos de Venta.
+- **Devolución:** línea con kilos negativos **y** valor negativo. Las demás líneas son venta, incluidas las de
+  valor negativo sin kilos (p. ej. notas crédito), que restan del valor bruto.
+- **Kilos brutos** = kilos sin devoluciones; **kilos devueltos** (en positivo); **kilos netos** = kilos brutos −
+  kilos devueltos.
+- **Valor bruto** = neto + ajuste, sin devoluciones; **valor de devolución** (en positivo); **valor ajuste de
+  precio** = `discount_value`; **valor neto** = `value`. Valor bruto − devolución − ajuste = valor neto.
+- **Precio de lista** = valor bruto / kilos brutos; **precio neto** = valor neto / kilos netos.
+- **% cumplimiento del precio de lista** = precio neto / precio de lista.
+- **Por tipo de ajuste** (ajuste de precio de mercado y fecha corta): solo la venta y sobre el valor bruto, como
+  si fuera el único: (valor bruto − ese ajuste) / valor bruto.
 
-### Informe diario por canal de venta
+Todos los % se calculan desde las sumas, nunca promediando % de filas.
 
-**`Informe_Diario_Canal_Venta.ipynb`** genera 8 PowerPoint (Región Oriente y Región Occidente ×
-Institucional, Amas de casa, Modernos y Tradicional) en `output/Informe_Diario_Canal_Venta/`. Cada uno
-lleva 6 láminas del informe de avance, con toda la información filtrada por ese canal de venta:
-portada, panorama, tendencia diaria, rangos de % de cumplimiento, resumen por canal de distribución y
-resumen por grupo de material 6. Va siempre a corte de ayer (no tiene `CORTE_D`).
+### Reporte ejecutivo diario (`Reporte_Ejecutivo.ipynb`)
 
-### Reporte ejecutivo diario
+Genera tres PowerPoint en `output/Reporte_Ejecutivo/`.
 
-**`Reporte_Ejecutivo.ipynb`** genera una sola lámina, a corte de ayer contra el mes anterior completo, en
-`output/Reporte_Ejecutivo/`. Para el total compañía y cada región muestra:
+**Lámina ejecutiva** (un archivo, total compañía y las dos regiones):
 - el **% de cumplimiento general** a corte, con la variación contra el mes anterior;
 - el cumplimiento por **canal de venta**, con el menor resaltado;
 - la **ruta** donde menos se cumple: canal de venta → canal de distribución → grupo de material 6. El canal de
   distribución y el grupo son los de menor cumplimiento entre los que pesan al menos `PARTICIPACION_MIN` (5%) de
   la venta de su nivel;
-- el **cumplimiento por tipo de descuento**: ajuste de precio de mercado y fecha corta, cada uno como si fuera el
-  único descuento, con su variación.
+- el **cumplimiento por tipo de ajuste**: ajuste de precio de mercado y fecha corta, con su variación.
 
-Además genera **una lámina por región** (`Reporte_Ejecutivo_Region_<región>_…pptx`) con más detalle:
-- **Cómo voy y por qué se descuenta:** el cumplimiento, el ajuste de precio de mercado y la fecha corta en % de la
-  lista con su variación, y las devoluciones.
-- **Dónde:** mapa de calor canal de venta × canal de distribución; rojo, por debajo del cumplimiento general de la
-  región.
-- **Tendencia:** el cumplimiento acumulado del mes, día a día, del mes en curso contra el mes anterior, con la
-  comparación a igual día del mes.
+**Un archivo por región** (Región Oriente y Región Occidente), con dos láminas:
+1. **Cómo voy, por qué y dónde:** el cumplimiento y los ajustes en % de la lista con su variación, y las
+   devoluciones; el **mapa** canal de venta × canal de distribución (en cada celda, el % de cumplimiento con su
+   variación en puntos y el precio neto por kg con su diferencia en pesos, contra el mes anterior completo; fuera
+   del mapa, los totales por canal y de la región); y la **tendencia** del cumplimiento acumulado del mes, día a
+   día, contra el mes anterior.
+2. **Día a día:** el % de cumplimiento de cada día y las barras de valor neto y kilos netos, del 1 del mes
+   anterior al corte, con el acumulado del mes en punteado y la variación contra el mes anterior a igual día.
 
-Se corre igual que el diario (*Run All*, sin parámetros) y usa la misma `consultas.descargar_mes()`.
+### Informe semanal por región (`Informe_Region_semanal.ipynb`)
+
+Genera un PowerPoint por región (Región Oriente y Región Occidente) en `output/Informe_Avance_Region/`:
+
+| Láminas | Contenido |
+| --- | --- |
+| Portada | |
+| Panorama | Tabla de indicadores (kilos y valor brutos, devueltos y netos, ajuste de precio, precio de lista y neto, % de cumplimiento) y tendencia día a día del precio de lista y neto y de la venta neta con el % de cumplimiento |
+| Rangos | Rangos de % de cumplimiento del total, por canal de distribución, canal de venta y grupo de material, con la tabla resumen de cada uno |
+| Distribuidoras | Concentración del ajuste |
+| Clientes | Top de clientes de Mayoreo y de Puntos de Venta |
 
 ### Datos (`consultas.py`)
 
-`consultas.py` tiene, además del `SQL_DESCUENTOS` que usa `main.py`, la consulta de los reportes
-(`SQL_REPORTES`, con la sociedad y las devoluciones aparte), los cálculos por fila (`calcular()`: % de
-lista, rangos y motivo) y `descargar_mes(inicio, fin)`, que devuelve un DataFrame. Un cambio en la
-consulta o en los cálculos de los reportes se hace ahí una sola vez y lo toman el diario y el semanal.
+`consultas.py` tiene dos bloques:
 
-### Otros informes
+- **`SQL_DESCUENTOS`**: la consulta de `main.py` (tabla base). No separa devoluciones ni sigue la metodología de
+  los reportes.
+- **`SQL_REPORTES`** + `calcular()` (% de lista, rangos y motivo por fila) + `descargar_mes(inicio, fin)`, que
+  devuelve un DataFrame: lo usan los dos notebooks. Un cambio en la consulta o en los cálculos de los reportes se
+  hace ahí una sola vez.
 
-| Notebook | Genera | Carpeta |
-| --- | --- | --- |
-| `Informe_Ajustes_Region.ipynb` | Informe general 2025 vs 2026 por región y Excel del panorama | `output/Informe_Ajustes_Region/` |
-| `Top_Clientes.ipynb` | Top de clientes del mes de `MES_CLIENTES` | `output/Top_Clientes/` |
-| `Informe_Cliente.ipynb` | Informe de un cliente (`CLIENTE`) | `output/Informe_Cliente/` |
-| `Descuentos.ipynb` | El notebook original, que genera todo junto | `output/General/` |
-
-Estos sí leen el histórico 2025–2026 (`FECHA_INICIO` a `FECHA_FIN`, un Parquet de ~500 MB que
-tarda varios minutos en consultarse). Con `GENERAR_PARQUET = False` reutilizan el Parquet que ya
-exista con las mismas fechas.
+Los notebooks no comparten el resto del código: cada uno tiene su copia de la preparación y de las funciones, así
+que un cambio en una función común (p. ej. `indicadores()`) hay que repetirlo en los dos.
 
 ## Tabla base con `main.py`
 
@@ -137,7 +141,8 @@ del maestro de clientes).
 
 ## Cómo se calcula
 
-En `daily_sales`, `value` ya es la venta **neta** y `discount_value` es el descuento
+Esto es para la tabla base de `main.py`; los reportes usan su propia metodología (ver
+[Metodología de los reportes](#metodología-de-los-reportes)). En `daily_sales`, `value` ya es la venta **neta** y `discount_value` es el descuento
 **total** (incluye la fecha corta).
 
 | Concepto | Fórmula |
@@ -196,7 +201,8 @@ sus ceros a la izquierda (`'01'`, `'018'`).
   registros con la misma lista de precios y tipologías distintas, y la consulta toma
   uno de ellos sin un criterio fijo. Cuando la venta trae la tipología vacía, dos
   corridas sobre los mismos datos pueden diferir en tipología / canal de venta (y por
-  eso en algún rango) para unas pocas ventas. Los totales no cambian.
+  eso en algún rango) para unas pocas ventas. Los totales no cambian. Solo afecta a
+  `main.py`: la consulta de los reportes (`SQL_REPORTES`) ya desempata.
 - **Descuento foco casi vacío.** En 2026 hay una sola línea con valor; sus columnas
   quedan listas para cuando se registre.
 - **La base es en vivo.** Recorrer el mismo período dos veces puede dar unas pocas

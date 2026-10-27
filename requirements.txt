@@ -1,7 +1,16 @@
-pandas>=2.0
-SQLAlchemy>=2.0
-psycopg2-binary>=2.9
-python-dotenv>=1.0
-# Salidas: openpyxl escribe el .xlsx y pyarrow el .parquet
-openpyxl>=3.1
-pyarrow>=14.0
+# Versiones mínimas = las instaladas en venv/ (Python 3.14)
+
+# Datos y conexión a PostgreSQL (main.py, consultas.py y los dos notebooks)
+pandas>=3.0.6
+SQLAlchemy>=2.1.4
+psycopg2-binary>=2.9.13
+python-dotenv>=1.2.4
+
+# Salidas de main.py: openpyxl escribe el .xlsx y pyarrow el .parquet
+openpyxl>=3.1.5
+pyarrow>=26.0.0
+
+# Notebooks de reportes: gráficas, PowerPoint y kernel de Jupyter (trae IPython)
+matplotlib>=3.11.2
+python-pptx>=1.0.2
+ipykernel>=7.4.0
